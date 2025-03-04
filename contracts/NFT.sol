@@ -15,11 +15,16 @@ contract NFT is ERC721Enumerable, Ownable {
     uint256 public allowMintingOn;
 
     bool public paused = false; // Pause minting
+    bool public whitelistOnly = true; // Only allow whitelisted addresses to mint
+
+    mapping (address => bool) public whitelist; // Whitelisted addresses
 
     event Mint(uint256 amount, address minter);
     event Withdraw(uint256 amount, address owner);
     event PauseStateChanged(bool paused);
-
+    event AddedToWhitelist(address indexed user);
+    event RemovedFromWhitelist(address indexed user);
+    event WhitelistOnlyToggled (bool whitelistOnly);
     constructor(
         string memory _name,
         string memory _symbol,
@@ -40,6 +45,11 @@ contract NFT is ERC721Enumerable, Ownable {
         require(!paused, "Contract is paused");
         _;
     }
+    // Create a custom modifier to check if minting is whitelisted
+    modifier whenWhitelisted() {
+        require(whitelist[msg.sender] || !whitelistOnly, "Address is not whitelisted");
+        _;
+    }
     function pause() public onlyOwner {
         paused = true;
         emit PauseStateChanged(true);
@@ -48,7 +58,37 @@ contract NFT is ERC721Enumerable, Ownable {
         paused = false;
         emit PauseStateChanged(false);
     }
-    function mint(uint256 _mintAmount) public payable whenNotPaused {
+    // Toggle whitelist only mode
+    function toggleWhitelistOnly() public onlyOwner {
+        whitelistOnly = !whitelistOnly;
+        emit WhitelistOnlyToggled(whitelistOnly);
+    }
+
+    // Add a single address to whitelist
+    function addToWhitelist(address _user) public onlyOwner {
+        whitelist[_user] = true;
+        emit AddedToWhitelist(_user);
+    }
+
+    // Add multiple addresses to whitelist in one transaction
+    function addManyToWhitelist(address[] calldata _users) public onlyOwner {
+        for (uint256 i = 0; i < _users.length; i++) {
+            whitelist[_users[i]] = true;
+            emit AddedToWhitelist(_users[i]);
+        }
+    }
+
+    // Remove an address from whitelist
+    function removeFromWhitelist(address _user) public onlyOwner {
+        whitelist[_user] = false;
+        emit RemovedFromWhitelist(_user);
+    }
+
+    // Check if an address is whitelisted
+    function isAddressWhitelisted(address _user) public view returns (bool) {
+        return whitelist[_user];
+    }
+    function mint(uint256 _mintAmount) public payable whenNotPaused whenWhitelisted {
         // Only allow minting after specified time
         require(block.timestamp >= allowMintingOn);
         // Must mint at least 1 token
